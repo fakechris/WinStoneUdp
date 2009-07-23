@@ -115,7 +115,7 @@ public class UdpListener implements Listener, Runnable {
             	SocketAddress client = channel.receive(in);
             	
             	RC4 rc4 = new RC4();
-            	byte[] result = rc4.rc4(in.array());
+            	byte[] result = rc4.rc4(in.array(), in.position());
             	
             	//this.objectPool.handleRequest(client, in, this);
             	

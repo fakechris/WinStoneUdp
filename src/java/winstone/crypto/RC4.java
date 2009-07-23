@@ -172,5 +172,44 @@ public class RC4 {
         
         return result;
     }
+ 
     
+    /** 
+     * RC4 encryption/decryption.
+     *
+     * @param buf  the data to be encrypted/decrypted
+     * @return the result of the encryption/decryption
+     */
+    public byte[] rc4(byte[] buf, int length) {
+
+        //int lx = this.x;
+        //int ly = this.y;
+        
+        int xorIndex;
+        byte tmp;
+        
+        if (buf == null || buf.length < length) {
+            return null;
+        }
+        
+        byte[] result = new byte[length];
+        
+        for (int i=0; i < length; i++) {
+
+            x = (x + 1) & 0xff;
+            y = ((state[x] & 0xff) + y) & 0xff;
+
+            tmp = state[x];
+            state[x] = state[y];
+            state[y] = tmp;
+            
+            xorIndex = ((state[x] &0xff) + (state[y] & 0xff)) & 0xff;
+            result[i] = (byte)(buf[i] ^ state[xorIndex]);
+        }
+        
+        //this.x = lx;
+        //this.y = ly;
+        
+        return result;
+    }
 }
