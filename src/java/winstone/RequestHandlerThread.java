@@ -23,7 +23,7 @@ import javax.servlet.ServletRequestListener;
  * @author <a href="mailto:rick_knowles@hotmail.com">Rick Knowles</a>
  * @version $Id: RequestHandlerThread.java,v 1.21 2007/04/23 02:55:35 rickknowles Exp $
  */
-public class RequestHandlerThread implements Runnable {
+public class RequestHandlerThread implements Runnable, RequestHandler {
     private Thread thread;
     private ObjectPool objectPool;
     private WinstoneInputStream inData;
@@ -269,9 +269,9 @@ public class RequestHandlerThread implements Runnable {
         req.discardRequestBody();
     }
 
-    /**
-     * Assign a socket to the handler
-     */
+    /* (non-Javadoc)
+	 * @see winstone.RequestHandler#commenceRequestHandling(java.net.Socket, winstone.Listener)
+	 */
     public void commenceRequestHandling(Socket socket, Listener listener) {
         this.listener = listener;
         this.socket = socket;
@@ -283,33 +283,51 @@ public class RequestHandlerThread implements Runnable {
             this.thread.start();
     }
 
+    /* (non-Javadoc)
+	 * @see winstone.RequestHandler#setRequest(winstone.WinstoneRequest)
+	 */
     public void setRequest(WinstoneRequest request) {
         this.req = request;
     }
 
+    /* (non-Javadoc)
+	 * @see winstone.RequestHandler#setResponse(winstone.WinstoneResponse)
+	 */
     public void setResponse(WinstoneResponse response) {
         this.rsp = response;
     }
 
+    /* (non-Javadoc)
+	 * @see winstone.RequestHandler#setInStream(winstone.WinstoneInputStream)
+	 */
     public void setInStream(WinstoneInputStream inStream) {
         this.inData = inStream;
     }
 
+    /* (non-Javadoc)
+	 * @see winstone.RequestHandler#setOutStream(winstone.WinstoneOutputStream)
+	 */
     public void setOutStream(WinstoneOutputStream outStream) {
         this.outData = outStream;
     }
 
+    /* (non-Javadoc)
+	 * @see winstone.RequestHandler#setRequestStartTime()
+	 */
     public void setRequestStartTime() {
         this.requestStartTime = System.currentTimeMillis();
     }
 
+    /* (non-Javadoc)
+	 * @see winstone.RequestHandler#getRequestProcessTime()
+	 */
     public long getRequestProcessTime() {
         return System.currentTimeMillis() - this.requestStartTime;
     }
 
-    /**
-     * Trigger the thread destruction for this handler
-     */
+    /* (non-Javadoc)
+	 * @see winstone.RequestHandler#destroy()
+	 */
     public void destroy() {
         if (this.thread.isAlive()) {
             this.thread.interrupt();

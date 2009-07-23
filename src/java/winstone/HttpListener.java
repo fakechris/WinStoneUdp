@@ -164,7 +164,7 @@ public class HttpListener implements Listener, Runnable {
      * packets.
      */
     public void allocateRequestResponse(Socket socket, InputStream inSocket,
-            OutputStream outSocket, RequestHandlerThread handler,
+            OutputStream outSocket, RequestHandler handler,
             boolean iAmFirst) throws SocketException, IOException {
         Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
                 "HttpListener.AllocatingRequest", Thread.currentThread()
@@ -200,7 +200,7 @@ public class HttpListener implements Listener, Runnable {
      * code for this connection's protocol (ie releasing input/output streams,
      * etc).
      */
-    public void deallocateRequestResponse(RequestHandlerThread handler,
+    public void deallocateRequestResponse(RequestHandler handler,
             WinstoneRequest req, WinstoneResponse rsp,
             WinstoneInputStream inData, WinstoneOutputStream outData) 
             throws IOException {
@@ -214,7 +214,7 @@ public class HttpListener implements Listener, Runnable {
             this.objectPool.releaseResponseToPool(rsp);
     }
 
-    public String parseURI(RequestHandlerThread handler, WinstoneRequest req,
+    public String parseURI(RequestHandler handler, WinstoneRequest req,
             WinstoneResponse rsp, WinstoneInputStream inData, Socket socket,
             boolean iAmFirst) throws IOException {
         parseSocketInfo(socket, req);

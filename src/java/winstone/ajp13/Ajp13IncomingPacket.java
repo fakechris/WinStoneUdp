@@ -13,7 +13,7 @@ import java.util.Hashtable;
 import java.util.Map;
 
 import winstone.Logger;
-import winstone.RequestHandlerThread;
+import winstone.RequestHandler;
 import winstone.WinstoneException;
 
 /**
@@ -50,7 +50,7 @@ public class Ajp13IncomingPacket {
      * Constructor
      */
     public Ajp13IncomingPacket(InputStream in, 
-            RequestHandlerThread handler) throws IOException {
+            RequestHandler handler) throws IOException {
         // Get the incoming packet flag
         byte headerBuffer[] = new byte[4];
         int headerBytesRead = in.read(headerBuffer);

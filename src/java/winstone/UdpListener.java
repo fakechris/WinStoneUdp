@@ -117,7 +117,7 @@ public class UdpListener implements Listener, Runnable {
             	RC4 rc4 = new RC4();
             	byte[] result = rc4.rc4(in.array(), in.position());
             	
-            	//this.objectPool.handleRequest(client, in, this);
+            	this.objectPool.handleRequest(client, result, this);
             	
                 //TODO: process this
             	// out.clear();
@@ -141,42 +141,70 @@ public class UdpListener implements Listener, Runnable {
 	}
     
 	public void allocateRequestResponse(Socket socket, InputStream inSocket,
-			OutputStream outSocket, RequestHandlerThread handler,
+			OutputStream outSocket, RequestHandler handler,
 			boolean iAmFirst) throws SocketException, IOException {
-		// TODO Auto-generated method stub
-		
+        Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
+                "UdpListener.AllocatingRequest", Thread.currentThread()
+                        .getName());
+        socket.setSoTimeout(CONNECTION_TIMEOUT);
+
+        // Build input/output streams, plus request/response
+        WinstoneInputStream inData = new WinstoneInputStream(inSocket);
+        WinstoneOutputStream outData = new WinstoneOutputStream(outSocket, false);
+        WinstoneRequest req = this.objectPool.getRequestFromPool();
+        WinstoneResponse rsp = this.objectPool.getResponseFromPool();
+        outData.setResponse(rsp);
+        req.setInputStream(inData);
+        rsp.setOutputStream(outData);
+        rsp.setRequest(req);
+        // rsp.updateContentTypeHeader("text/html");
+        req.setHostGroup(this.hostGroup);
+
+        // Set the handler's member variables so it can execute the servlet
+        handler.setRequest(req);
+        handler.setResponse(rsp);
+        handler.setInStream(inData);
+        handler.setOutStream(outData);
+        
+        // If using this listener, we must set the server header now, because it
+        // must be the first header. Ajp13 listener can defer to the Apache Server
+        // header
+        rsp.setHeader("Server", Launcher.RESOURCES.getString("ServerVersion"));
 	}
 
-	public void deallocateRequestResponse(RequestHandlerThread handler,
-			WinstoneRequest req, WinstoneResponse rsp,
-			WinstoneInputStream inData, WinstoneOutputStream outData)
-			throws IOException {
-		// TODO Auto-generated method stub
-		
-	}
-
-
-
-	public String parseURI(RequestHandlerThread handler, WinstoneRequest req,
+	public String parseURI(RequestHandler handler, WinstoneRequest req,
 			WinstoneResponse rsp, WinstoneInputStream inData, Socket socket,
 			boolean iAmFirst) throws IOException {
 		// TODO Auto-generated method stub
 		return null;
 	}
 
-	public boolean processKeepAlive(WinstoneRequest request,
-			WinstoneResponse response, InputStream inSocket)
-			throws IOException, InterruptedException {
-		// TODO Auto-generated method stub
-		return false;
+	public void deallocateRequestResponse(RequestHandler handler,
+			WinstoneRequest req, WinstoneResponse rsp,
+			WinstoneInputStream inData, WinstoneOutputStream outData)
+			throws IOException {
+        handler.setInStream(null);
+        handler.setOutStream(null);
+        handler.setRequest(null);
+        handler.setResponse(null);
+        if (req != null)
+            this.objectPool.releaseRequestToPool(req);
+        if (rsp != null)
+            this.objectPool.releaseResponseToPool(rsp);
 	}
 
 	public void releaseSocket(Socket socket, InputStream inSocket,
 			OutputStream outSocket) throws IOException {
-		// TODO Auto-generated method stub
-		
+        inSocket.close();
+        outSocket.close();
+        socket.close();
 	}
 
+	public boolean processKeepAlive(WinstoneRequest request,
+			WinstoneResponse response, InputStream inSocket)
+			throws IOException, InterruptedException {
+		return true;
+	}
 
 
 }

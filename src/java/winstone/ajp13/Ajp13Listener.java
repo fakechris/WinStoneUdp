@@ -28,7 +28,7 @@ import winstone.Launcher;
 import winstone.Listener;
 import winstone.Logger;
 import winstone.ObjectPool;
-import winstone.RequestHandlerThread;
+import winstone.RequestHandler;
 import winstone.WebAppConfiguration;
 import winstone.WinstoneException;
 import winstone.WinstoneInputStream;
@@ -147,7 +147,7 @@ public class Ajp13Listener implements Listener, Runnable {
      * packets.
      */
     public void allocateRequestResponse(Socket socket, InputStream inSocket,
-            OutputStream outSocket, RequestHandlerThread handler,
+            OutputStream outSocket, RequestHandler handler,
             boolean iAmFirst) throws SocketException, IOException {
         WinstoneRequest req = this.objectPool.getRequestFromPool();
         WinstoneResponse rsp = this.objectPool.getResponseFromPool();
@@ -223,7 +223,7 @@ public class Ajp13Listener implements Listener, Runnable {
      * code for this connection's protocol (ie releasing input/output streams,
      * etc).
      */
-    public void deallocateRequestResponse(RequestHandlerThread handler,
+    public void deallocateRequestResponse(RequestHandler handler,
             WinstoneRequest req, WinstoneResponse rsp,
             WinstoneInputStream inData, WinstoneOutputStream outData) 
             throws IOException {
@@ -241,7 +241,7 @@ public class Ajp13Listener implements Listener, Runnable {
      * This is kind of a hack, since we have already parsed the uri to get the
      * input stream. Just pass back the request uri
      */
-    public String parseURI(RequestHandlerThread handler, WinstoneRequest req,
+    public String parseURI(RequestHandler handler, WinstoneRequest req,
             WinstoneResponse rsp, WinstoneInputStream inData, Socket socket,
             boolean iAmFirst) throws IOException {
         String uri = (String) req.getAttribute(TEMPORARY_URL_STASH);

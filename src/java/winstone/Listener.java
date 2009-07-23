@@ -38,7 +38,7 @@ public interface Listener {
      * a first-time accept)
      */
     public void allocateRequestResponse(Socket socket, InputStream inSocket,
-            OutputStream outSocket, RequestHandlerThread handler,
+            OutputStream outSocket, RequestHandler handler,
             boolean iAmFirst) throws SocketException, IOException;
 
     /**
@@ -46,7 +46,7 @@ public interface Listener {
      * code for this connection's protocol (ie releasing input/output streams,
      * etc).
      */
-    public void deallocateRequestResponse(RequestHandlerThread handler,
+    public void deallocateRequestResponse(RequestHandler handler,
             WinstoneRequest req, WinstoneResponse rsp,
             WinstoneInputStream inData, WinstoneOutputStream outData)
             throws IOException;
@@ -58,7 +58,7 @@ public interface Listener {
      * not this is the initial request on on this socket (ie a keep alive or 
      * a first-time accept)
      */
-    public String parseURI(RequestHandlerThread handler, WinstoneRequest req,
+    public String parseURI(RequestHandler handler, WinstoneRequest req,
             WinstoneResponse rsp, WinstoneInputStream inData, Socket socket,
             boolean iAmFirst) throws IOException;
 

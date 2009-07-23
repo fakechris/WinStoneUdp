@@ -118,7 +118,7 @@ public class ObjectPool implements Runnable {
         synchronized (this.requestHandlerSemaphore) {
             // If we have too many idle request handlers
             while (this.unusedRequestHandlerThreads.size() > MAX_IDLE_REQUEST_HANDLERS_IN_POOL) {
-                RequestHandlerThread rh = (RequestHandlerThread) this.unusedRequestHandlerThreads.get(0);
+                RequestHandler rh = (RequestHandler) this.unusedRequestHandlerThreads.get(0);
                 rh.destroy();
                 this.unusedRequestHandlerThreads.remove(rh);
             }
@@ -129,10 +129,10 @@ public class ObjectPool implements Runnable {
         synchronized (this.requestHandlerSemaphore) {
             Collection usedHandlers = new ArrayList(this.usedRequestHandlerThreads);
             for (Iterator i = usedHandlers.iterator(); i.hasNext();)
-                releaseRequestHandler((RequestHandlerThread) i.next());
+                releaseRequestHandler((RequestHandler) i.next());
             Collection unusedHandlers = new ArrayList(this.unusedRequestHandlerThreads);
             for (Iterator i = unusedHandlers.iterator(); i.hasNext();)
-                ((RequestHandlerThread) i.next()).destroy();
+                ((RequestHandler) i.next()).destroy();
             this.unusedRequestHandlerThreads.clear();
         }
         if (this.thread != null) {
@@ -147,12 +147,12 @@ public class ObjectPool implements Runnable {
      */
     public void handleRequest(Socket socket, Listener listener)
             throws IOException, InterruptedException {
-        RequestHandlerThread rh = null;
+        RequestHandler rh = null;
         synchronized (this.requestHandlerSemaphore) {
             // If we have any spare, get it from the pool
             int unused = this.unusedRequestHandlerThreads.size();
             if (unused > 0) {
-                rh = (RequestHandlerThread) this.unusedRequestHandlerThreads.remove(unused - 1);
+                rh = (RequestHandler) this.unusedRequestHandlerThreads.remove(unused - 1);
                 this.usedRequestHandlerThreads.add(rh);
                 Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
                         "ObjectPool.UsingRHPoolThread", new String[] {
@@ -214,7 +214,7 @@ public class ObjectPool implements Runnable {
     /**
      * Release the handler back into the pool
      */
-    public void releaseRequestHandler(RequestHandlerThread rh) {
+    public void releaseRequestHandler(RequestHandler rh) {
         synchronized (this.requestHandlerSemaphore) {
             this.usedRequestHandlerThreads.remove(rh);
             this.unusedRequestHandlerThreads.add(rh);
