@@ -20,11 +20,16 @@ import java.nio.ByteOrder;
 import java.nio.channels.DatagramChannel;
 import java.util.Map;
 
+import winstone.crypto.RC4;
+
 public class UdpListener implements Listener, Runnable {
     protected int listenPort;
     protected String listenAddress;
     protected boolean doHostnameLookups;
     protected boolean interrupted;
+    protected ObjectPool objectPool;
+    protected DatagramChannel channel;
+    protected HostGroup hostGroup;
     
     protected static boolean DEFAULT_HNL = false;
 
@@ -34,7 +39,9 @@ public class UdpListener implements Listener, Runnable {
     /**
      * Constructor
      */
-    public UdpListener(Map args) throws IOException {
+    public UdpListener(Map args, ObjectPool objectPool, HostGroup hostGroup) throws IOException {
+    	this.objectPool = objectPool;
+    	this.hostGroup = hostGroup;
         // Load resources
         this.listenPort = Integer.parseInt(WebAppConfiguration.stringArg(args,
                 getConnectorName() + "Port", "" + getDefaultPort()));
@@ -89,30 +96,36 @@ public class UdpListener implements Listener, Runnable {
 	public void run() {
 		try {
 			SocketAddress address = new InetSocketAddress(this.listenPort);
-			DatagramChannel channel = DatagramChannel.open();
+			channel = DatagramChannel.open();
 		    DatagramSocket socket = channel.socket();
 		    socket.bind(address);
             Logger.log(Logger.INFO, Launcher.RESOURCES, "UdpListener.StartupOK",
                     new String[] { getConnectorName().toUpperCase(),
                             this.listenPort + "" });
 
-            ByteBuffer in = ByteBuffer.allocate(1024*16);            
+            ByteBuffer in = ByteBuffer.allocate(1024*16);
+            
             // max 65k out buffer
-            ByteBuffer out = ByteBuffer.allocate(65*1024);
-            out.order(ByteOrder.BIG_ENDIAN);
+            //ByteBuffer out = ByteBuffer.allocate(65*1024);
+            //out.order(ByteOrder.BIG_ENDIAN);
             
             // Enter the main loop
             while (!interrupted) {
             	in.clear();
             	SocketAddress client = channel.receive(in);
             	
+            	RC4 rc4 = new RC4();
+            	byte[] result = rc4.rc4(in.array());
+            	
+            	//this.objectPool.handleRequest(client, in, this);
+            	
                 //TODO: process this
-            	 out.clear();
+            	// out.clear();
                  //out.putLong(secondsSince1970);
                  //out.flip();
                  //out.position(4);
             	 
-                 channel.send(out, client);
+                 //channel.send(out, client);
             }
 
             socket.close();

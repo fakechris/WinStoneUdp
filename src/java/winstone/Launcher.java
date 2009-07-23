@@ -35,6 +35,7 @@ import java.util.Properties;
  */
 public class Launcher implements Runnable {
     
+	static final String UDP_LISTENER_CLASS = "winstone.UdpListener";
     static final String HTTP_LISTENER_CLASS = "winstone.HttpListener";
     static final String HTTPS_LISTENER_CLASS = "winstone.ssl.HttpsListener";
     static final String AJP_LISTENER_CLASS = "winstone.ajp13.Ajp13Listener";
@@ -197,8 +198,9 @@ public class Launcher implements Runnable {
                 (File []) commonLibCLPaths.toArray(new File[0]), args);
 
         // Create connectors (http, https and ajp)
-        this.listeners = new ArrayList();
+        this.listeners = new ArrayList();        
         spawnListener(HTTP_LISTENER_CLASS);
+        spawnListener(UDP_LISTENER_CLASS);
         spawnListener(AJP_LISTENER_CLASS);
         try {
             Class.forName("javax.net.ServerSocketFactory");
