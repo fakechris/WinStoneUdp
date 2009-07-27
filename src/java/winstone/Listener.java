@@ -10,6 +10,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.SocketException;
 
 /**
@@ -60,6 +61,10 @@ public interface Listener {
      */
     public String parseURI(RequestHandler handler, WinstoneRequest req,
             WinstoneResponse rsp, WinstoneInputStream inData, Socket socket,
+            boolean iAmFirst) throws IOException;
+
+    public String parseURI(RequestHandler handler, WinstoneRequest req,
+            WinstoneResponse rsp, WinstoneInputStream inData, SocketAddress peerAddr,
             boolean iAmFirst) throws IOException;
 
     /**

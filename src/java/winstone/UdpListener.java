@@ -30,6 +30,7 @@ public class UdpListener implements Listener, Runnable {
     protected boolean interrupted;
     protected ObjectPool objectPool;
     protected DatagramChannel channel;
+    protected DatagramSocket socket;
     protected HostGroup hostGroup;
     
     protected static boolean DEFAULT_HNL = false;
@@ -98,7 +99,7 @@ public class UdpListener implements Listener, Runnable {
 		try {
 			SocketAddress address = new InetSocketAddress(this.listenPort);
 			channel = DatagramChannel.open();
-		    DatagramSocket socket = channel.socket();
+		    socket = channel.socket();
 		    socket.bind(address);
             Logger.log(Logger.INFO, Launcher.RESOURCES, "UdpListener.StartupOK",
                     new String[] { getConnectorName().toUpperCase(),
@@ -160,23 +161,30 @@ public class UdpListener implements Listener, Runnable {
         rsp.setHeader("Server", Launcher.RESOURCES.getString("ServerVersion"));
 	}
 
+    public String parseURI(RequestHandler handler, WinstoneRequest req,
+            WinstoneResponse rsp, WinstoneInputStream inData, Socket socket,
+            boolean iAmFirst) throws IOException {
+		return null;
+    }
+    
 	public String parseURI(RequestHandler handler, WinstoneRequest req,
-			WinstoneResponse rsp, WinstoneInputStream inData, Socket socket,
+			WinstoneResponse rsp, WinstoneInputStream inData, 
+			SocketAddress peerAddr,
 			boolean iAmFirst) throws IOException {
 
         req.setScheme(getConnectorScheme());
         req.setServerPort(socket.getLocalPort());
         req.setLocalPort(socket.getLocalPort());
         req.setLocalAddr(socket.getLocalAddress().getHostAddress());
-        req.setRemoteIP(socket.getInetAddress().getHostAddress());
-        req.setRemotePort(socket.getPort());
+        req.setRemoteIP(((InetSocketAddress)peerAddr).getAddress().getHostAddress());
+        req.setRemotePort(((InetSocketAddress)peerAddr).getPort());
         if (this.doHostnameLookups) {
             req.setServerName(socket.getLocalAddress().getHostName());
-            req.setRemoteName(socket.getInetAddress().getHostName());
+            req.setRemoteName(((InetSocketAddress)peerAddr).getAddress().getHostName());
             req.setLocalName(socket.getLocalAddress().getHostName());
         } else {
             req.setServerName(socket.getLocalAddress().getHostAddress());
-            req.setRemoteName(socket.getInetAddress().getHostAddress());
+            req.setRemoteName(((InetSocketAddress)peerAddr).getAddress().getHostAddress());
             req.setLocalName(socket.getLocalAddress().getHostAddress());
         }
         
@@ -186,8 +194,7 @@ public class UdpListener implements Listener, Runnable {
             uriBuffer = inData.readLine();
         } catch (InterruptedIOException err) {
             throw err;
-        } finally {
-            try {socket.setSoTimeout(CONNECTION_TIMEOUT);} catch (Throwable err) {}
+        } finally {            
         }
         handler.setRequestStartTime();
 

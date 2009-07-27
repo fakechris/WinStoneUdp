@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.SocketException;
 import java.util.concurrent.ThreadPoolExecutor;
 
@@ -20,21 +21,23 @@ public class UdpRequestHandlerThread implements Runnable, RequestHandler {
     private WinstoneRequest req;
     private WinstoneResponse rsp;
     private Listener listener;
-    private Socket socket;
     private InputStream inStream;
     private OutputStream outStream;
     private String threadName;
     private long requestStartTime;
     private boolean simulateModUniqueId;
-    private boolean saveSessions;    
+    private boolean saveSessions; 
+    private SocketAddress peerAddr;
     
     /**
      * Constructor - this is called by the handler pool, and just sets up for
      * when a real request comes along.
      */
     public UdpRequestHandlerThread(ObjectPool objectPool, int threadIndex, 
-            boolean simulateModUniqueId, boolean saveSessions, ThreadPoolExecutor poolExecutor) {
+            boolean simulateModUniqueId, boolean saveSessions, 
+            ThreadPoolExecutor poolExecutor, SocketAddress peerAddr) {
     	this.poolExecutor = poolExecutor;
+    	this.peerAddr = peerAddr;
         this.objectPool = objectPool;
         this.simulateModUniqueId = simulateModUniqueId;
         this.saveSessions = saveSessions;
@@ -58,7 +61,7 @@ public class UdpRequestHandlerThread implements Runnable, RequestHandler {
                     this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
                     return;
                 }
-                String servletURI = this.listener.parseURI(this, this.req, this.rsp, this.inData, this.socket, true);
+                String servletURI = this.listener.parseURI(this, this.req, this.rsp, this.inData, this.peerAddr, true);
                 if (servletURI == null) {
                     Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
                             "UDPRequestHandlerThread.KeepAliveTimedOut", this.threadName);
@@ -157,15 +160,14 @@ public class UdpRequestHandlerThread implements Runnable, RequestHandler {
             } catch (SocketException errIO) {
             }
             this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
-            this.listener.releaseSocket(this.socket, inStream, outStream); // shut sockets
+            this.listener.releaseSocket(null, inStream, outStream); // shut sockets
         } catch (Throwable err) {
             try {
                 this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
             } catch (Throwable errClose) {
             }
             try {
-                this.listener.releaseSocket(this.socket, inStream,
-                        outStream); // shut sockets
+                this.listener.releaseSocket(null, inStream, outStream); // shut sockets
             } catch (Throwable errClose) {
             }
             Logger.log(Logger.ERROR, Launcher.RESOURCES,

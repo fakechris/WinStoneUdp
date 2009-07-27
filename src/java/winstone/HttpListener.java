@@ -13,6 +13,7 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.SocketException;
 import java.util.ArrayList;
 import java.util.List;
@@ -385,4 +386,10 @@ public class HttpListener implements Listener, Runnable {
         // If no headers available, parse an empty list
         req.parseHeaders(headerList);
     }
+
+	public String parseURI(RequestHandler handler, WinstoneRequest req,
+			WinstoneResponse rsp, WinstoneInputStream inData,
+			SocketAddress peerAddr, boolean iAmFirst) throws IOException {
+		return null;
+	}
 }

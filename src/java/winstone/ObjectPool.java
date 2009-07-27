@@ -227,12 +227,11 @@ public class ObjectPool implements Runnable {
     		throws IOException, InterruptedException {
     	RequestHandler rh = new UdpRequestHandlerThread(this,
     			this.threadIndex++, this.simulateModUniqueId,
-				this.saveSessions, this.poolExecutor);
+				this.saveSessions, this.poolExecutor, peerAddr);
     	
     	rh.commenceRequestHandling(new ByteArrayInputStream(inputData), outStream, listener);
     }
     
-
     /**
      * Release the handler back into the pool
      */

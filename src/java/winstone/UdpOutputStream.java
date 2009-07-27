@@ -36,6 +36,7 @@ public class UdpOutputStream extends ByteArrayOutputStream {
         out.order(ByteOrder.BIG_ENDIAN);
         //out.clear();
         out.put(this.buf, 0, this.count);
+        out.flip();
 		try {
 			this.channel.send(out, this.client);
 		} catch (IOException err) {
