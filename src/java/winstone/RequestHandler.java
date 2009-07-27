@@ -1,5 +1,7 @@
 package winstone;
 
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 
 public interface RequestHandler {
@@ -8,6 +10,7 @@ public interface RequestHandler {
 	 * Assign a socket to the handler
 	 */
 	public void commenceRequestHandling(Socket socket, Listener listener);
+	public void commenceRequestHandling(InputStream inStream, OutputStream outStream, Listener listener);
 
 	public void setRequest(WinstoneRequest request);
 

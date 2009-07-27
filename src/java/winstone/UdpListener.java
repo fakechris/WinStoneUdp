@@ -8,16 +8,17 @@ package winstone;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
-import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.channels.DatagramChannel;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 import winstone.crypto.RC4;
@@ -105,27 +106,15 @@ public class UdpListener implements Listener, Runnable {
 
             ByteBuffer in = ByteBuffer.allocate(1024*16);
             
-            // max 65k out buffer
-            //ByteBuffer out = ByteBuffer.allocate(65*1024);
-            //out.order(ByteOrder.BIG_ENDIAN);
-            
             // Enter the main loop
             while (!interrupted) {
             	in.clear();
             	SocketAddress client = channel.receive(in);
             	
             	RC4 rc4 = new RC4();
-            	byte[] result = rc4.rc4(in.array(), in.position());
-            	
-            	this.objectPool.handleRequest(client, result, this);
-            	
-                //TODO: process this
-            	// out.clear();
-                 //out.putLong(secondsSince1970);
-                 //out.flip();
-                 //out.position(4);
-            	 
-                 //channel.send(out, client);
+            	byte[] result = rc4.rc4(in.array(), 0, in.position());
+            	            
+            	this.objectPool.handleRequest(client, result, new UdpOutputStream(channel, client), this);
             }
 
             socket.close();
@@ -146,7 +135,6 @@ public class UdpListener implements Listener, Runnable {
         Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
                 "UdpListener.AllocatingRequest", Thread.currentThread()
                         .getName());
-        socket.setSoTimeout(CONNECTION_TIMEOUT);
 
         // Build input/output streams, plus request/response
         WinstoneInputStream inData = new WinstoneInputStream(inSocket);
@@ -175,8 +163,45 @@ public class UdpListener implements Listener, Runnable {
 	public String parseURI(RequestHandler handler, WinstoneRequest req,
 			WinstoneResponse rsp, WinstoneInputStream inData, Socket socket,
 			boolean iAmFirst) throws IOException {
-		// TODO Auto-generated method stub
-		return null;
+
+        req.setScheme(getConnectorScheme());
+        req.setServerPort(socket.getLocalPort());
+        req.setLocalPort(socket.getLocalPort());
+        req.setLocalAddr(socket.getLocalAddress().getHostAddress());
+        req.setRemoteIP(socket.getInetAddress().getHostAddress());
+        req.setRemotePort(socket.getPort());
+        if (this.doHostnameLookups) {
+            req.setServerName(socket.getLocalAddress().getHostName());
+            req.setRemoteName(socket.getInetAddress().getHostName());
+            req.setLocalName(socket.getLocalAddress().getHostName());
+        } else {
+            req.setServerName(socket.getLocalAddress().getHostAddress());
+            req.setRemoteName(socket.getInetAddress().getHostAddress());
+            req.setLocalName(socket.getLocalAddress().getHostAddress());
+        }
+        
+        byte uriBuffer[] = null;
+        try {
+            Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "HttpListener.WaitingForURILine");
+            uriBuffer = inData.readLine();
+        } catch (InterruptedIOException err) {
+            throw err;
+        } finally {
+            try {socket.setSoTimeout(CONNECTION_TIMEOUT);} catch (Throwable err) {}
+        }
+        handler.setRequestStartTime();
+
+        // Get header data (eg protocol, method, uri, headers, etc)
+        String uriLine = new String(uriBuffer);
+        if (uriLine.trim().equals(""))
+            throw new SocketException("Empty URI Line");
+        String servletURI = parseURILine(uriLine, req, rsp);
+        parseHeaders(req, inData);
+        rsp.extractRequestKeepAliveHeader(req);
+        int contentLength = req.getContentLength();
+        if (contentLength != -1)
+            inData.setContentLength(contentLength);
+        return servletURI;
 	}
 
 	public void deallocateRequestResponse(RequestHandler handler,
@@ -197,7 +222,6 @@ public class UdpListener implements Listener, Runnable {
 			OutputStream outSocket) throws IOException {
         inSocket.close();
         outSocket.close();
-        socket.close();
 	}
 
 	public boolean processKeepAlive(WinstoneRequest request,
@@ -207,4 +231,83 @@ public class UdpListener implements Listener, Runnable {
 	}
 
 
+	 /**
+     * Processes the uri line into it's component parts, determining protocol,
+     * method and uri
+     */
+    private String parseURILine(String uriLine, WinstoneRequest req,
+            WinstoneResponse rsp) {
+        Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "HttpListener.UriLine", uriLine.trim());
+        
+        // Method
+        int spacePos = uriLine.indexOf(' ');
+        if (spacePos == -1)
+            throw new WinstoneException(Launcher.RESOURCES.getString(
+                    "HttpListener.ErrorUriLine", uriLine));
+        String method = uriLine.substring(0, spacePos).toUpperCase();
+        String fullURI = null;
+
+        // URI
+        String remainder = uriLine.substring(spacePos + 1);
+        spacePos = remainder.indexOf(' ');
+        if (spacePos == -1) {
+            fullURI = trimHostName(remainder.trim());
+            req.setProtocol("HTTP/0.9");
+            rsp.setProtocol("HTTP/0.9");
+        } else {
+            fullURI = trimHostName(remainder.substring(0, spacePos).trim());
+            String protocol = remainder.substring(spacePos + 1).trim().toUpperCase();
+            req.setProtocol(protocol);
+            rsp.setProtocol(protocol);
+        }
+
+        req.setMethod(method);
+        // req.setRequestURI(fullURI);
+        return fullURI;
+    }
+
+    private String trimHostName(String input) {
+        if (input == null)
+            return null;
+        else if (input.startsWith("/"))
+            return input;
+
+        int hostStart = input.indexOf("://");
+        if (hostStart == -1)
+            return input;
+        String hostName = input.substring(hostStart + 3);
+        int pathStart = hostName.indexOf('/');
+        if (pathStart == -1)
+            return "/";
+        else
+            return hostName.substring(pathStart);
+    }
+
+    /**
+     * Parse the incoming stream into a list of headers (stopping at the first
+     * blank line), then call the parseHeaders(req, list) method on that list.
+     */
+    public void parseHeaders(WinstoneRequest req, WinstoneInputStream inData)
+            throws IOException {
+        List headerList = new ArrayList();
+
+        if (!req.getProtocol().startsWith("HTTP/0")) {
+            // Loop to get headers
+            byte headerBuffer[] = inData.readLine();
+            String headerLine = new String(headerBuffer);
+
+            while (headerLine.trim().length() > 0) {
+                if (headerLine.indexOf(':') != -1) {
+                    headerList.add(headerLine.trim());
+                    Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
+                            "HttpListener.Header", headerLine.trim());
+                }
+                headerBuffer = inData.readLine();
+                headerLine = new String(headerBuffer);
+            }
+        }
+
+        // If no headers available, parse an empty list
+        req.parseHeaders(headerList);
+    }
 }

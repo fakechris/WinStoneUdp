@@ -6,13 +6,19 @@
  */
 package winstone;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Holds the object pooling code for Winstone. Presently this is only responses
@@ -46,12 +52,17 @@ public class ObjectPool implements Runnable {
     private boolean saveSessions;
 
     private Thread thread;
+    private ThreadPoolExecutor poolExecutor;
     
     /**
      * Constructs an instance of the object pool, including handlers, requests
      * and responses
      */
     public ObjectPool(Map args) throws IOException {
+    	this.poolExecutor = new ThreadPoolExecutor(Runtime.getRuntime().availableProcessors(), 
+    			Runtime.getRuntime().availableProcessors()*2, 
+    			0, TimeUnit.SECONDS, new ArrayBlockingQueue(10),
+                new ThreadPoolExecutor.DiscardOldestPolicy());
         this.simulateModUniqueId = WebAppConfiguration.booleanArg(args, "simulateModUniqueId", false);
         this.saveSessions = WebAppConfiguration.useSavedSessions(args);
 
@@ -210,6 +221,17 @@ public class ObjectPool implements Runnable {
             }
         }
     }
+    
+    public void handleRequest(SocketAddress peerAddr, byte[] inputData, 
+    		OutputStream outStream, Listener listener)
+    		throws IOException, InterruptedException {
+    	RequestHandler rh = new UdpRequestHandlerThread(this,
+    			this.threadIndex++, this.simulateModUniqueId,
+				this.saveSessions, this.poolExecutor);
+    	
+    	rh.commenceRequestHandling(new ByteArrayInputStream(inputData), outStream, listener);
+    }
+    
 
     /**
      * Release the handler back into the pool

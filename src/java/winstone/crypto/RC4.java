@@ -110,9 +110,6 @@ public class RC4 {
             
             index1 = (index1 + 1) % key.length;
         }
-
-
-
     }
 
     /** 
@@ -127,10 +124,8 @@ public class RC4 {
             return null;
         }
         
-        byte[] tmp = data.getBytes();
-        
-        this.rc4(tmp);
-        
+        byte[] tmp = data.getBytes();        
+        this.rc4(tmp);       
         return tmp;
     }
 
@@ -180,7 +175,7 @@ public class RC4 {
      * @param buf  the data to be encrypted/decrypted
      * @return the result of the encryption/decryption
      */
-    public byte[] rc4(byte[] buf, int length) {
+    public byte[] rc4(byte[] buf, int offset, int length) {
 
         //int lx = this.x;
         //int ly = this.y;
@@ -188,13 +183,13 @@ public class RC4 {
         int xorIndex;
         byte tmp;
         
-        if (buf == null || buf.length < length) {
+        if (buf == null || buf.length < length+offset ) {
             return null;
         }
         
         byte[] result = new byte[length];
         
-        for (int i=0; i < length; i++) {
+        for (int i = offset; i < offset+length; i++) {
 
             x = (x + 1) & 0xff;
             y = ((state[x] & 0xff) + y) & 0xff;
@@ -206,6 +201,30 @@ public class RC4 {
             xorIndex = ((state[x] &0xff) + (state[y] & 0xff)) & 0xff;
             result[i] = (byte)(buf[i] ^ state[xorIndex]);
         }
+        
+        //this.x = lx;
+        //this.y = ly;
+        
+        return result;
+    }
+    
+    public byte rc4(byte buf) {
+
+        //int lx = this.x;
+        //int ly = this.y;
+        
+        int xorIndex;
+        byte tmp;
+        
+        x = (x + 1) & 0xff;
+        y = ((state[x] & 0xff) + y) & 0xff;
+
+        tmp = state[x];
+        state[x] = state[y];
+        state[y] = tmp;
+        
+        xorIndex = ((state[x] &0xff) + (state[y] & 0xff)) & 0xff;
+        byte result = (byte)(buf ^ state[xorIndex]);
         
         //this.x = lx;
         //this.y = ly;

@@ -6,13 +6,14 @@ import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 import javax.servlet.ServletException;
 import javax.servlet.ServletRequestEvent;
 import javax.servlet.ServletRequestListener;
 
 public class UdpRequestHandlerThread implements Runnable, RequestHandler {
-    private Thread thread;
+	private ThreadPoolExecutor poolExecutor;
     private ObjectPool objectPool;
     private WinstoneInputStream inData;
     private WinstoneOutputStream outData;
@@ -20,195 +21,159 @@ public class UdpRequestHandlerThread implements Runnable, RequestHandler {
     private WinstoneResponse rsp;
     private Listener listener;
     private Socket socket;
+    private InputStream inStream;
+    private OutputStream outStream;
     private String threadName;
     private long requestStartTime;
     private boolean simulateModUniqueId;
-    private boolean saveSessions;
+    private boolean saveSessions;    
     
     /**
      * Constructor - this is called by the handler pool, and just sets up for
      * when a real request comes along.
      */
     public UdpRequestHandlerThread(ObjectPool objectPool, int threadIndex, 
-            boolean simulateModUniqueId, boolean saveSessions) {
+            boolean simulateModUniqueId, boolean saveSessions, ThreadPoolExecutor poolExecutor) {
+    	this.poolExecutor = poolExecutor;
         this.objectPool = objectPool;
         this.simulateModUniqueId = simulateModUniqueId;
         this.saveSessions = saveSessions;
         this.threadName = Launcher.RESOURCES.getString(
-                "RequestHandlerThread.ThreadName", "" + threadIndex);
-
-        // allocate a thread to run on this object
-        this.thread = new Thread(this, threadName);
-        this.thread.setDaemon(true);
+                "UDPRequestHandlerThread.ThreadName", "" + threadIndex);
     }
     
     /**
      * The main thread execution code.
      */
 	public void run() {
-		 boolean interrupted = false;
-	        while (!interrupted) {
-	            // Start request processing
-	            InputStream inSocket = null;
-	            OutputStream outSocket = null;
-	            boolean iAmFirst = true;
-	            try {
-	                // Get input/output streams
-	                inSocket = socket.getInputStream();
-	                outSocket = socket.getOutputStream();
+        // Start request processing
+        try {	            	
+            // Get input/output streams
+            // The keep alive loop - exiting from here means the connection has closed            
+            try {
+                long requestId = System.currentTimeMillis();
+                this.listener.allocateRequestResponse(null, inStream, outStream, this, true);
+                if (this.req == null) {
+                    // Dead request - happens sometimes with ajp13 - discard
+                    this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
+                    return;
+                }
+                String servletURI = this.listener.parseURI(this, this.req, this.rsp, this.inData, this.socket, true);
+                if (servletURI == null) {
+                    Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
+                            "UDPRequestHandlerThread.KeepAliveTimedOut", this.threadName);
+                    
+                    // Keep alive timed out - deallocate and go into wait state
+                    this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
+                    return;
+                }
+                
+                if (this.simulateModUniqueId) {
+                    req.setAttribute("UNIQUE_ID", "" + requestId);
+                }
+                long headerParseTime = getRequestProcessTime();
 
-	                // The keep alive loop - exiting from here means the connection has closed
-	                boolean continueFlag = true;
-	                while (continueFlag && !interrupted) {
-	                    try {
-	                        long requestId = System.currentTimeMillis();
-	                        this.listener.allocateRequestResponse(socket, inSocket,
-	                                outSocket, this, iAmFirst);
-	                        if (this.req == null) {
-	                            // Dead request - happens sometimes with ajp13 - discard
-	                            this.listener.deallocateRequestResponse(this, req,
-	                                    rsp, inData, outData);
-	                            continue;
-	                        }
-	                        String servletURI = this.listener.parseURI(this,
-	                                this.req, this.rsp, this.inData, this.socket,
-	                                iAmFirst);
-	                        if (servletURI == null) {
-	                            Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
-	                                    "RequestHandlerThread.KeepAliveTimedOut", this.threadName);
-	                            
-	                            // Keep alive timed out - deallocate and go into wait state
-	                            this.listener.deallocateRequestResponse(this, req,
-	                                    rsp, inData, outData);
-	                            continueFlag = false;
-	                            continue;
-	                        }
-	                        
-	                        if (this.simulateModUniqueId) {
-	                            req.setAttribute("UNIQUE_ID", "" + requestId);
-	                        }
-	                        long headerParseTime = getRequestProcessTime();
-	                        iAmFirst = false;
+                HostConfiguration hostConfig = req.getHostGroup().getHostByName(req.getServerName());
+                Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
+                        "UDPRequestHandlerThread.StartRequest",
+                        new String[] {"" + requestId, hostConfig.getHostname()});
 
-	                        HostConfiguration hostConfig = req.getHostGroup().getHostByName(req.getServerName());
-	                        Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
-	                                "RequestHandlerThread.StartRequest",
-	                                new String[] {"" + requestId, hostConfig.getHostname()});
+                // Get the URI from the request, check for prefix, then
+                // match it to a requestDispatcher
+                WebAppConfiguration webAppConfig = hostConfig.getWebAppByURI(servletURI);
+                if (webAppConfig == null) {
+                    webAppConfig = hostConfig.getWebAppByURI("/");    
+                }
+                if (webAppConfig == null) {
+                    Logger.log(Logger.WARNING, Launcher.RESOURCES,
+                            "UDPRequestHandlerThread.UnknownWebapp",
+                            new String[] { servletURI });
+                    rsp.sendError(WinstoneResponse.SC_NOT_FOUND, 
+                            Launcher.RESOURCES.getString("UDPRequestHandlerThread.UnknownWebappPage", servletURI));
+                    rsp.flushBuffer();
+                    req.discardRequestBody();
+                    writeToAccessLog(servletURI, req, rsp, null);
 
-	                        // Get the URI from the request, check for prefix, then
-	                        // match it to a requestDispatcher
-	                        WebAppConfiguration webAppConfig = hostConfig.getWebAppByURI(servletURI);
-	                        if (webAppConfig == null) {
-	                            webAppConfig = hostConfig.getWebAppByURI("/");    
-	                        }
-	                        if (webAppConfig == null) {
-	                            Logger.log(Logger.WARNING, Launcher.RESOURCES,
-	                                    "RequestHandlerThread.UnknownWebapp",
-	                                    new String[] { servletURI });
-	                            rsp.sendError(WinstoneResponse.SC_NOT_FOUND, 
-	                                    Launcher.RESOURCES.getString("RequestHandlerThread.UnknownWebappPage", servletURI));
-	                            rsp.flushBuffer();
-	                            req.discardRequestBody();
-	                            writeToAccessLog(servletURI, req, rsp, null);
+                    // Process keep-alive
+                    this.listener.processKeepAlive(req, rsp, inStream);
+                    this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
+                    Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "UDPRequestHandlerThread.FinishRequest",
+                            "" + requestId);
+                    Logger.log(Logger.SPEED, Launcher.RESOURCES, "UDPRequestHandlerThread.RequestTime",
+                            new String[] { servletURI, "" + headerParseTime, "" + getRequestProcessTime() });
+                    return;
+                }
+                
+                req.setWebAppConfig(webAppConfig);
 
-	                            // Process keep-alive
-	                            continueFlag = this.listener.processKeepAlive(req, rsp, inSocket);
-	                            this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
-	                            Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "RequestHandlerThread.FinishRequest",
-	                                    "" + requestId);
-	                            Logger.log(Logger.SPEED, Launcher.RESOURCES, "RequestHandlerThread.RequestTime",
-	                                    new String[] { servletURI, "" + headerParseTime, "" + getRequestProcessTime() });
-	                            continue;
-	                        }
-	                        req.setWebAppConfig(webAppConfig);
+                // Now we've verified it's in the right webapp, send
+                // request in scope notify
+                ServletRequestListener reqLsnrs[] = webAppConfig.getRequestListeners();
+                for (int n = 0; n < reqLsnrs.length; n++) {
+                    ClassLoader cl = Thread.currentThread().getContextClassLoader();
+                    Thread.currentThread().setContextClassLoader(webAppConfig.getLoader());
+                    reqLsnrs[n].requestInitialized(new ServletRequestEvent(webAppConfig, req));
+                    Thread.currentThread().setContextClassLoader(cl);
+                }
 
-	                        // Now we've verified it's in the right webapp, send
-	                        // request in scope notify
-	                        ServletRequestListener reqLsnrs[] = webAppConfig.getRequestListeners();
-	                        for (int n = 0; n < reqLsnrs.length; n++) {
-	                            ClassLoader cl = Thread.currentThread().getContextClassLoader();
-	                            Thread.currentThread().setContextClassLoader(webAppConfig.getLoader());
-	                            reqLsnrs[n].requestInitialized(new ServletRequestEvent(webAppConfig, req));
-	                            Thread.currentThread().setContextClassLoader(cl);
-	                        }
+                // Lookup a dispatcher, then process with it
+                processRequest(webAppConfig, req, rsp, 
+                        webAppConfig.getServletURIFromRequestURI(servletURI));
+                writeToAccessLog(servletURI, req, rsp, webAppConfig);
 
-	                        // Lookup a dispatcher, then process with it
-	                        processRequest(webAppConfig, req, rsp, 
-	                                webAppConfig.getServletURIFromRequestURI(servletURI));
-	                        writeToAccessLog(servletURI, req, rsp, webAppConfig);
+                this.outData.finishResponse();
+                this.inData.finishRequest();
 
-	                        this.outData.finishResponse();
-	                        this.inData.finishRequest();
+                Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
+                        "UDPRequestHandlerThread.FinishRequest",
+                        "" + requestId);
 
-	                        Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
-	                                "RequestHandlerThread.FinishRequest",
-	                                "" + requestId);
+                // Process keep-alive
+                this.listener.processKeepAlive(req, rsp, inStream);
 
-	                        // Process keep-alive
-	                        continueFlag = this.listener.processKeepAlive(req, rsp, inSocket);
+                // Set last accessed time on session as start of this
+                // request
+                req.markSessionsAsRequestFinished(this.requestStartTime, this.saveSessions);
 
-	                        // Set last accessed time on session as start of this
-	                        // request
-	                        req.markSessionsAsRequestFinished(this.requestStartTime, this.saveSessions);
+                // send request listener notifies
+                for (int n = 0; n < reqLsnrs.length; n++) {
+                    ClassLoader cl = Thread.currentThread().getContextClassLoader();
+                    Thread.currentThread().setContextClassLoader(webAppConfig.getLoader());
+                    reqLsnrs[n].requestDestroyed(new ServletRequestEvent(webAppConfig, req));
+                    Thread.currentThread().setContextClassLoader(cl);                            
+                }
 
-	                        // send request listener notifies
-	                        for (int n = 0; n < reqLsnrs.length; n++) {
-	                            ClassLoader cl = Thread.currentThread().getContextClassLoader();
-	                            Thread.currentThread().setContextClassLoader(webAppConfig.getLoader());
-	                            reqLsnrs[n].requestDestroyed(new ServletRequestEvent(webAppConfig, req));
-	                            Thread.currentThread().setContextClassLoader(cl);                            
-	                        }
+                req.setWebAppConfig(null);
+                rsp.setWebAppConfig(null);
+                req.setRequestAttributeListeners(null);
 
-	                        req.setWebAppConfig(null);
-	                        rsp.setWebAppConfig(null);
-	                        req.setRequestAttributeListeners(null);
-
-	                        this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
-	                        Logger.log(Logger.SPEED, Launcher.RESOURCES, "RequestHandlerThread.RequestTime",
-	                                new String[] { servletURI, "" + headerParseTime, 
-	                                                "" + getRequestProcessTime() });
-	                    } catch (InterruptedIOException errIO) {
-	                        continueFlag = false;
-	                        Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
-	                                "RequestHandlerThread.SocketTimeout", errIO);
-	                    } catch (SocketException errIO) {
-	                        continueFlag = false;
-	                    }
-	                }
-	                this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
-	                this.listener.releaseSocket(this.socket, inSocket, outSocket); // shut sockets
-	            } catch (Throwable err) {
-	                try {
-	                    this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
-	                } catch (Throwable errClose) {
-	                }
-	                try {
-	                    this.listener.releaseSocket(this.socket, inSocket,
-	                            outSocket); // shut sockets
-	                } catch (Throwable errClose) {
-	                }
-	                Logger.log(Logger.ERROR, Launcher.RESOURCES,
-	                        "RequestHandlerThread.RequestError", err);
-	            }
-
-	            this.objectPool.releaseRequestHandler(this);
-
-	            if (!interrupted) {
-	                // Suspend this thread until we get assigned and woken up
-	                Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
-	                        "RequestHandlerThread.EnterWaitState");
-	                try {
-	                    synchronized (this) {
-	                        this.wait();
-	                    }
-	                } catch (InterruptedException err) {
-	                    interrupted = true;
-	                }
-	                Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
-	                        "RequestHandlerThread.WakingUp");
-	            }
-	        }
-	        Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "RequestHandlerThread.ThreadExit");
+                this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
+                Logger.log(Logger.SPEED, Launcher.RESOURCES, "UDPRequestHandlerThread.RequestTime",
+                        new String[] { servletURI, "" + headerParseTime, 
+                                        "" + getRequestProcessTime() });
+            } catch (InterruptedIOException errIO) {
+                Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
+                        "UDPRequestHandlerThread.SocketTimeout", errIO);
+            } catch (SocketException errIO) {
+            }
+            this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
+            this.listener.releaseSocket(this.socket, inStream, outStream); // shut sockets
+        } catch (Throwable err) {
+            try {
+                this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
+            } catch (Throwable errClose) {
+            }
+            try {
+                this.listener.releaseSocket(this.socket, inStream,
+                        outStream); // shut sockets
+            } catch (Throwable errClose) {
+            }
+            Logger.log(Logger.ERROR, Launcher.RESOURCES,
+                    "UDPRequestHandlerThread.RequestError", err);
+        } finally {
+            this.objectPool.releaseRequestHandler(this);
+            Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "UDPRequestHandlerThread.ThreadExit");        	
+        }
 	}
 	
     private void processRequest(WebAppConfiguration webAppConfig, WinstoneRequest req, 
@@ -221,13 +186,13 @@ public class UdpRequestHandlerThread implements Runnable, RequestHandler {
             // Null RD means an error or we have been redirected to a welcome page
             if (rd != null) {
                 Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
-                        "RequestHandlerThread.HandlingRD", rd.getName());
+                        "UDPRequestHandlerThread.HandlingRD", rd.getName());
                 rd.forward(req, rsp);
             }
             // if null returned, assume we were redirected
         } catch (Throwable err) {
             Logger.log(Logger.WARNING, Launcher.RESOURCES,
-                    "RequestHandlerThread.UntrappedError", err);
+                    "UDPRequestHandlerThread.UntrappedError", err);
             rdError = webAppConfig.getErrorDispatcherByClass(err);
         }
 
@@ -241,7 +206,7 @@ public class UdpRequestHandlerThread implements Runnable, RequestHandler {
                     rdError.forward(req, rsp);
                 }
             } catch (Throwable err) {
-                Logger.log(Logger.ERROR, Launcher.RESOURCES, "RequestHandlerThread.ErrorInErrorServlet", err);
+                Logger.log(Logger.ERROR, Launcher.RESOURCES, "UDPRequestHandlerThread.ErrorInErrorServlet", err);
             }
 //            rsp.sendUntrappedError(err, req, rd != null ? rd.getName() : null);
         }
@@ -252,11 +217,20 @@ public class UdpRequestHandlerThread implements Runnable, RequestHandler {
 
 	public void commenceRequestHandling(Socket socket, Listener listener) {
 	}
+    
+	public void commenceRequestHandling(InputStream inStream, OutputStream outStream, Listener listener) {
+		this.inStream = inStream;
+		this.outStream = outStream;
+		this.listener = listener;
+		if (this.poolExecutor != null) {
+			poolExecutor.execute(this);
+		}
+	}
 
 	public void destroy() {
-        if (this.thread.isAlive()) {
-            this.thread.interrupt();
-        }	
+		if (this.poolExecutor != null) {
+			poolExecutor.remove(this);
+		}
 	}
 
 	public long getRequestProcessTime() {

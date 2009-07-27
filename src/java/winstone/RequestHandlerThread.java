@@ -282,6 +282,9 @@ public class RequestHandlerThread implements Runnable, RequestHandler {
         else
             this.thread.start();
     }
+    
+    public void commenceRequestHandling(InputStream inStream, OutputStream outStream, Listener listener) {    	
+    }
 
     /* (non-Javadoc)
 	 * @see winstone.RequestHandler#setRequest(winstone.WinstoneRequest)
