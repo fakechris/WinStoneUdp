@@ -31,6 +31,9 @@ public class UdpOutputStream extends ByteArrayOutputStream {
 	}
 	
 	public void flush() {		
+	}
+	
+	public void close() {	
 		// write data 
 		ByteBuffer out = ByteBuffer.allocate(this.count);
         out.order(ByteOrder.BIG_ENDIAN);
@@ -43,8 +46,5 @@ public class UdpOutputStream extends ByteArrayOutputStream {
 			Logger.log(Logger.ERROR, Launcher.RESOURCES,
                     "UdpOutputStream.FlushError", err);
 		}
-	}
-	
-	public void close() {	
 	}
 }

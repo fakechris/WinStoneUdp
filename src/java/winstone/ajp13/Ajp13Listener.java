@@ -15,6 +15,7 @@ import java.io.UnsupportedEncodingException;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketAddress;
 import java.net.SocketException;
 import java.security.cert.CertificateException;
 import java.security.cert.CertificateFactory;
@@ -449,4 +450,10 @@ public class Ajp13Listener implements Listener, Runnable {
 //        }
 //        System.out.println(dump);
 //    }
+
+	public String parseURI(RequestHandler handler, WinstoneRequest req,
+			WinstoneResponse rsp, WinstoneInputStream inData,
+			SocketAddress peerAddr, boolean iAmFirst) throws IOException {
+		return null;
+	}
 }
