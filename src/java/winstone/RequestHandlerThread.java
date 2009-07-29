@@ -97,6 +97,8 @@ public class RequestHandlerThread implements Runnable, RequestHandler {
                             continueFlag = false;
                             continue;
                         }
+                        if (this.inData.isEncryptedStream())
+                        	this.outData.setIsEncrypted(true);
                         
                         if (this.simulateModUniqueId) {
                             req.setAttribute("UNIQUE_ID", "" + requestId);

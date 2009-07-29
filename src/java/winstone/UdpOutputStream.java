@@ -7,27 +7,13 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.DatagramChannel;
 
-import winstone.crypto.RC4;
 
 public class UdpOutputStream extends ByteArrayOutputStream {
-	private RC4 rc4;
 	private DatagramChannel channel;
 	private SocketAddress client;
 	public UdpOutputStream(DatagramChannel channel, SocketAddress client) {
-		rc4 = new RC4();
 		this.channel = channel;
 		this.client = client;
-	}
-	
-	public void write(int b) {		
-		super.write( rc4.rc4((byte)b) );
-	}
-
-	public void write(byte[] b,
-            int off,
-            int len) {
-		byte[] result = rc4.rc4(b, off, len);
-		super.write(result, 0, len);
 	}
 	
 	public void flush() {		

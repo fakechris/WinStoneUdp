@@ -14,6 +14,8 @@ import java.util.Stack;
 
 import javax.servlet.http.Cookie;
 
+import winstone.crypto.RC4;
+
 /**
  * Matches the socket output stream to the servlet output.
  * 
@@ -35,6 +37,9 @@ public class WinstoneOutputStream extends javax.servlet.ServletOutputStream {
     protected boolean closed = false;
     protected Stack includeByteStreams;
     
+    private RC4 rc4;
+    private boolean isEncrypted = false;
+    
     /**
      * Constructor
      */
@@ -47,6 +52,13 @@ public class WinstoneOutputStream extends javax.servlet.ServletOutputStream {
         this.buffer = new ByteArrayOutputStream();
     }
 
+    public void setIsEncrypted(boolean isEncrypted) {
+    	this.isEncrypted = isEncrypted;
+    	if (isEncrypted) {
+    		this.rc4 = new RC4();
+    	}
+    }
+    
     public void setResponse(WinstoneResponse response) {
         this.owner = response;
     }
@@ -93,7 +105,7 @@ public class WinstoneOutputStream extends javax.servlet.ServletOutputStream {
             return;
         }
 //        System.out.println("Out: " + this.bufferPosition + " char=" + (char)oneChar);
-        this.buffer.write(oneChar);
+        this.buffer.write(oneChar);        
         this.bufferPosition++;
         // if (this.headersWritten)
         if (this.bufferPosition >= this.bufferSize) {
@@ -103,6 +115,22 @@ public class WinstoneOutputStream extends javax.servlet.ServletOutputStream {
                         >= Integer.parseInt(contentLengthHeader))) {
             commit();
         }
+    }
+
+    private void writeOutStream(byte[] b) throws IOException {
+    	if (this.isEncrypted) {
+    		this.outStream.write(rc4.rc4(b));
+    	} else {
+    		this.outStream.write(b);
+    	}
+    }
+
+    private void writeOutStream(byte[] b, int pos, int offset) throws IOException {
+    	if (this.isEncrypted) {
+    		this.outStream.write(rc4.rc4(b, pos, offset));
+    	} else {
+    		this.outStream.write(b, pos, offset);
+    	}
     }
 
     public void commit() throws IOException {
@@ -119,16 +147,16 @@ public class WinstoneOutputStream extends javax.servlet.ServletOutputStream {
             String reason = Launcher.RESOURCES.getString("WinstoneOutputStream.reasonPhrase." + statusCode);
             String statusLine = this.owner.getProtocol() + " " + statusCode + " " + 
                     (reason == null ? "No reason" : reason);
-            this.outStream.write(statusLine.getBytes("8859_1"));
-            this.outStream.write(CR_LF);
+            writeOutStream(statusLine.getBytes("8859_1"));
+            writeOutStream(CR_LF);
             Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
                     "WinstoneOutputStream.ResponseStatus", statusLine);
 
             // Write headers and cookies
             for (Iterator i = this.owner.getHeaders().iterator(); i.hasNext();) {
                 String header = (String) i.next();
-                this.outStream.write(header.getBytes("8859_1"));
-                this.outStream.write(CR_LF);
+                writeOutStream(header.getBytes("8859_1"));
+                writeOutStream(CR_LF);
                 Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
                         "WinstoneOutputStream.Header", header);
             }
@@ -137,13 +165,13 @@ public class WinstoneOutputStream extends javax.servlet.ServletOutputStream {
                 for (Iterator i = this.owner.getCookies().iterator(); i.hasNext();) {
                     Cookie cookie = (Cookie) i.next();
                     String cookieText = this.owner.writeCookie(cookie);
-                    this.outStream.write(cookieText.getBytes("8859_1"));
-                    this.outStream.write(CR_LF);
+                    writeOutStream(cookieText.getBytes("8859_1"));
+                    writeOutStream(CR_LF);
                     Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
                             "WinstoneOutputStream.Header", cookieText);
                 }
             }
-            this.outStream.write(CR_LF);
+            writeOutStream(CR_LF);
             this.outStream.flush();
             // Logger.log(Logger.FULL_DEBUG,
             // Launcher.RESOURCES.getString("HttpProtocol.OutHeaders") + out.toString());
@@ -158,7 +186,7 @@ public class WinstoneOutputStream extends javax.servlet.ServletOutputStream {
                     - this.bytesCommitted, content.length);
         }
         if (commitLength > 0) {
-            this.outStream.write(content, 0, commitLength);
+            writeOutStream(content, 0, commitLength);
         }
         this.outStream.flush();
 

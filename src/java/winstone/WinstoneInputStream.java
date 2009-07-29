@@ -11,6 +11,8 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
+import winstone.crypto.RC4;
+
 /**
  * The request stream management class.
  * 
@@ -23,6 +25,11 @@ public class WinstoneInputStream extends javax.servlet.ServletInputStream {
     private Integer contentLength;
     private int readSoFar;
     private ByteArrayOutputStream dump;
+    
+    private RC4 rc4;
+    private boolean isEncrypted = false;
+    private int preRead[] = new int[3];
+    private int pos = -1; 
     
     /**
      * Constructor
@@ -40,21 +47,44 @@ public class WinstoneInputStream extends javax.servlet.ServletInputStream {
     public InputStream getRawInputStream() {
         return this.inData;
     }
+    
+    public boolean isEncryptedStream() {
+    	return this.isEncrypted;
+    }
 
     public void setContentLength(int length) {
         this.contentLength = new Integer(length);
         this.readSoFar = 0;
     }
-
+    
     public int read() throws IOException {
-        if (this.contentLength == null) {
-            int data = this.inData.read();
+    	if (pos < 2) {    		
+    		if (pos < 0)
+    		{
+	    		// 预读3个字节，决定是否需要解码 GET/POS/HEA/PUT
+	    		preRead[0] = this.inData.read();
+	    		preRead[1] = this.inData.read();
+	    		preRead[2] = this.inData.read();
+	    		this.isEncrypted = isEncryptedHttpHeader(preRead);
+	    		if (this.isEncrypted) {
+	    			rc4 = new RC4();
+	    			preRead[0] = rc4.rc4((byte)preRead[0]);
+	    			preRead[1] = rc4.rc4((byte)preRead[1]);
+	    			preRead[2] = rc4.rc4((byte)preRead[2]);
+	    		}
+    		}
+    		pos++;
+    		return preRead[pos];
+    	}
+    	
+        if (this.contentLength == null) {        	
+            int data = getData();
             this.dump.write(data);
 //            System.out.println("Char: " + (char) data);
             return data;
         } else if (this.contentLength.intValue() > this.readSoFar) {
             this.readSoFar++;
-            int data = this.inData.read();
+            int data = getData();
             this.dump.write(data);
 //            System.out.println("Char: " + (char) data);
             return data;
@@ -90,4 +120,20 @@ public class WinstoneInputStream extends javax.servlet.ServletInputStream {
         return outBuf;
     }
 
+    private boolean isEncryptedHttpHeader(int[] buf) {
+    	if ( (buf[0]=='G' && buf[1]=='E' && buf[2]=='T') ||
+    		 (buf[0]=='P' && buf[1]=='U' && buf[2]=='T') ||
+    		 (buf[0]=='H' && buf[1]=='E' && buf[2]=='A') ||
+    		 (buf[0]=='P' && buf[1]=='O' && buf[2]=='S') )
+    		return false;
+    	return true;
+    }
+    
+    private int getData() throws IOException {
+    	if (this.isEncrypted)
+    		return rc4.rc4((byte)this.inData.read());
+    	else
+    		return this.inData.read();
+    }
+    
 }

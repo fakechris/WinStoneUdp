@@ -6,8 +6,8 @@
  */
 package winstone;
 
-import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.net.SocketAddress;
@@ -222,14 +222,14 @@ public class ObjectPool implements Runnable {
         }
     }
     
-    public void handleRequest(SocketAddress peerAddr, byte[] inputData, 
+    public void handleRequest(SocketAddress peerAddr, InputStream inputStream, 
     		OutputStream outStream, Listener listener)
     		throws IOException, InterruptedException {
     	RequestHandler rh = new UdpRequestHandlerThread(this,
     			this.threadIndex++, this.simulateModUniqueId,
 				this.saveSessions, this.poolExecutor, peerAddr);
     	
-    	rh.commenceRequestHandling(new ByteArrayInputStream(inputData), outStream, listener);
+    	rh.commenceRequestHandling(inputStream, outStream, listener);
     }
     
     /**

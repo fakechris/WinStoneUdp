@@ -6,6 +6,7 @@
  */
 package winstone;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
@@ -20,8 +21,6 @@ import java.nio.channels.DatagramChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import winstone.crypto.RC4;
 
 public class UdpListener implements Listener, Runnable {
     protected int listenPort;
@@ -111,11 +110,10 @@ public class UdpListener implements Listener, Runnable {
             while (!interrupted) {
             	in.clear();
             	SocketAddress client = channel.receive(in);
-            	
-            	RC4 rc4 = new RC4();
-            	byte[] result = rc4.rc4(in.array(), 0, in.position());
             	            
-            	this.objectPool.handleRequest(client, result, new UdpOutputStream(channel, client), this);
+            	this.objectPool.handleRequest(client,
+            			new ByteArrayInputStream(in.array(), 0, in.position()), 
+            			new UdpOutputStream(channel, client), this);
             }
 
             socket.close();
@@ -190,7 +188,7 @@ public class UdpListener implements Listener, Runnable {
         
         byte uriBuffer[] = null;
         try {
-            Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "HttpListener.WaitingForURILine");
+            Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "UdpListener.WaitingForURILine");
             uriBuffer = inData.readLine();
         } catch (InterruptedIOException err) {
             throw err;
@@ -244,13 +242,13 @@ public class UdpListener implements Listener, Runnable {
      */
     private String parseURILine(String uriLine, WinstoneRequest req,
             WinstoneResponse rsp) {
-        Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "HttpListener.UriLine", uriLine.trim());
+        Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES, "UdpListener.UriLine", uriLine.trim());
         
         // Method
         int spacePos = uriLine.indexOf(' ');
         if (spacePos == -1)
             throw new WinstoneException(Launcher.RESOURCES.getString(
-                    "HttpListener.ErrorUriLine", uriLine));
+                    "UdpListener.ErrorUriLine", uriLine));
         String method = uriLine.substring(0, spacePos).toUpperCase();
         String fullURI = null;
 
@@ -307,7 +305,7 @@ public class UdpListener implements Listener, Runnable {
                 if (headerLine.indexOf(':') != -1) {
                     headerList.add(headerLine.trim());
                     Logger.log(Logger.FULL_DEBUG, Launcher.RESOURCES,
-                            "HttpListener.Header", headerLine.trim());
+                            "UdpListener.Header", headerLine.trim());
                 }
                 headerBuffer = inData.readLine();
                 headerLine = new String(headerBuffer);

@@ -70,6 +70,8 @@ public class UdpRequestHandlerThread implements Runnable, RequestHandler {
                     this.listener.deallocateRequestResponse(this, req, rsp, inData, outData);
                     return;
                 }
+                if (this.inData.isEncryptedStream())
+                	this.outData.setIsEncrypted(true);
                 
                 if (this.simulateModUniqueId) {
                     req.setAttribute("UNIQUE_ID", "" + requestId);
